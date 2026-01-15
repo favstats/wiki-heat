@@ -159,16 +159,20 @@ const chartData = computed(() => {
   // Determine if we need year labels (for ranges > 1 year)
   const rangeMs = end - start
   const rangeDays = rangeMs / (24 * 60 * 60 * 1000)
-  const showYear = rangeDays > 365
+  const showYear = rangeDays > 180 // Show year if range > 6 months
   
+  // Create labels with year info
   const labels = sortedDates.map(d => {
     const date = new Date(d)
     if (showYear) {
-      // For multi-year: show "Jan '24" format
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+      // For multi-year: show "Jan 15, 2024" or "Jan '24" for axis
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     }
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   })
+  
+  // Store raw dates for tooltip access
+  const rawDates = sortedDates
   
   const datasets = pages.map((page, index) => {
     const color = getPageColor(index)
@@ -202,7 +206,7 @@ const chartData = computed(() => {
     }
   })
   
-  return { labels, datasets }
+  return { labels, datasets, rawDates }
 })
 
 // Get metric display info
@@ -242,12 +246,20 @@ const chartOptions = computed(() => {
         callbacks: {
           title: (items) => {
             if (!items.length) return ''
-            // Get the actual date from the sorted dates
+            // Get the actual raw date for nice formatting
             const idx = items[0].dataIndex
-            const dates = chartData.value?.labels || []
-            const label = dates[idx] || ''
-            // Format nicely for tooltip
-            return label
+            const rawDates = chartData.value?.rawDates || []
+            const rawDate = rawDates[idx]
+            if (rawDate) {
+              const date = new Date(rawDate)
+              // Always show full date in tooltip: "January 15, 2024"
+              return date.toLocaleDateString('en-US', { 
+                month: 'long', 
+                day: 'numeric', 
+                year: 'numeric' 
+              })
+            }
+            return items[0].label || ''
           },
           label: (ctx) => {
             const { suffix, decimals } = metricInfo.value
