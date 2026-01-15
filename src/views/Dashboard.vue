@@ -117,10 +117,7 @@ function getPageColor(index) {
 
 // Helper to compute anonymous ratio for a date range from raw revisions
 function computeAnonRatioForDate(revisions, targetDate, windowDays = 30) {
-  if (!revisions || revisions.length === 0) {
-    console.log('[AnonCalc] No revisions provided')
-    return 0
-  }
+  if (!revisions || revisions.length === 0) return 0
   
   const endDate = new Date(targetDate)
   const startDate = new Date(targetDate)
@@ -130,23 +127,6 @@ function computeAnonRatioForDate(revisions, targetDate, windowDays = 30) {
     const revDate = new Date(r.timestamp)
     return revDate >= startDate && revDate <= endDate
   })
-  
-  // Debug first call only
-  if (!computeAnonRatioForDate._logged) {
-    computeAnonRatioForDate._logged = true
-    const totalAnon = revisions.filter(r => r.isAnon).length
-    console.log('[AnonCalc Debug]', {
-      totalRevisions: revisions.length,
-      totalWithIsAnon: totalAnon,
-      targetDate,
-      windowStart: startDate.toISOString(),
-      windowEnd: endDate.toISOString(),
-      windowRevisions: windowRevisions.length,
-      windowAnon: windowRevisions.filter(r => r.isAnon).length,
-      sampleRevision: revisions[0],
-      sampleAnonRevision: revisions.find(r => r.isAnon)
-    })
-  }
   
   if (windowRevisions.length === 0) return 0
   
@@ -175,8 +155,18 @@ const chartData = computed(() => {
   }
   
   const sortedDates = [...allDates].sort()
+  
+  // Determine if we need year labels (for ranges > 1 year)
+  const rangeMs = end - start
+  const rangeDays = rangeMs / (24 * 60 * 60 * 1000)
+  const showYear = rangeDays > 365
+  
   const labels = sortedDates.map(d => {
     const date = new Date(d)
+    if (showYear) {
+      // For multi-year: show "Jan '24" format
+      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    }
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   })
   
@@ -215,43 +205,92 @@ const chartData = computed(() => {
   return { labels, datasets }
 })
 
-const chartOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: 'rgba(15, 15, 23, 0.95)',
-      titleColor: 'rgba(255,255,255,0.7)',
-      bodyColor: 'rgba(255,255,255,0.9)',
-      borderColor: 'rgba(255,255,255,0.1)',
-      borderWidth: 1,
-      padding: 12,
-      titleFont: { family: 'JetBrains Mono', size: 11 },
-      bodyFont: { family: 'JetBrains Mono', size: 12 },
-      callbacks: {
-        label: (ctx) => {
-          const suffix = selectedMetric.value === 'heat' ? '' : 
-            ['revertRatio', 'anonRatio'].includes(selectedMetric.value) ? '%' : ''
-          return `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2) || 0}${suffix}`
+// Get metric display info
+const metricInfo = computed(() => {
+  const info = {
+    heat: { suffix: '', decimals: 2, name: 'Heat Score' },
+    editVelocity: { suffix: '/day', decimals: 1, name: 'Edit Velocity' },
+    revertRatio: { suffix: '%', decimals: 1, name: 'Revert Ratio' },
+    uniqueEditors: { suffix: '', decimals: 0, name: 'Unique Editors' },
+    anonRatio: { suffix: '%', decimals: 1, name: 'Anonymous' },
+  }
+  return info[selectedMetric.value] || info.heat
+})
+
+const chartOptions = computed(() => {
+  // Determine date range for axis formatting
+  const { start, end } = effectiveDateRange.value
+  const rangeDays = (end - start) / (24 * 60 * 60 * 1000)
+  const isMultiYear = rangeDays > 365
+  
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(10, 10, 15, 0.95)',
+        titleColor: 'rgba(255,255,255,0.9)',
+        bodyColor: 'rgba(255,255,255,0.8)',
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        padding: 14,
+        cornerRadius: 8,
+        titleFont: { family: 'system-ui', size: 12, weight: '600' },
+        bodyFont: { family: 'JetBrains Mono, monospace', size: 11 },
+        titleMarginBottom: 8,
+        callbacks: {
+          title: (items) => {
+            if (!items.length) return ''
+            // Get the actual date from the sorted dates
+            const idx = items[0].dataIndex
+            const dates = chartData.value?.labels || []
+            const label = dates[idx] || ''
+            // Format nicely for tooltip
+            return label
+          },
+          label: (ctx) => {
+            const { suffix, decimals } = metricInfo.value
+            const value = ctx.parsed.y?.toFixed(decimals) || '0'
+            return `  ${ctx.dataset.label}: ${value}${suffix}`
+          },
+          labelColor: (ctx) => ({
+            borderColor: ctx.dataset.borderColor,
+            backgroundColor: ctx.dataset.borderColor,
+            borderWidth: 2,
+            borderRadius: 2,
+          }),
         }
-      }
+      },
     },
-  },
-  scales: {
-    x: {
-      grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
-      ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 10 }, maxRotation: 0 },
+    scales: {
+      x: {
+        grid: { color: 'rgba(255,255,255,0.02)', drawBorder: false },
+        ticks: { 
+          color: 'rgba(255,255,255,0.3)', 
+          font: { size: 10 }, 
+          maxRotation: isMultiYear ? 45 : 0,
+          autoSkip: true,
+          maxTicksLimit: isMultiYear ? 12 : 15,
+        },
+      },
+      y: {
+        grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+        ticks: { 
+          color: 'rgba(255,255,255,0.3)', 
+          font: { family: 'JetBrains Mono', size: 10 },
+          callback: (value) => {
+            const { suffix } = metricInfo.value
+            return value + suffix
+          }
+        },
+        min: 0,
+        max: selectedMetric.value === 'heat' ? 1 : undefined,
+      },
     },
-    y: {
-      grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
-      ticks: { color: 'rgba(255,255,255,0.3)', font: { family: 'JetBrains Mono', size: 10 } },
-      min: 0,
-      max: selectedMetric.value === 'heat' ? 1 : undefined,
-    },
-  },
-  interaction: { intersect: false, mode: 'index' },
-}))
+    interaction: { intersect: false, mode: 'index' },
+  }
+})
 
 // Suggestions
 const addingSuggestion = ref(null)
@@ -402,22 +441,22 @@ function clearAll() {
             </button>
           </div>
           
-          <div class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
+          <!-- Custom inputs only when Custom selected -->
+          <div v-if="selectedDateRange === 'custom'" class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
             <input
               v-model="customStartDate"
               type="date"
-              @focus="selectedDateRange = 'custom'"
-              class="h-7 px-2 rounded bg-transparent border-0 text-xs focus:outline-none focus:ring-1 focus:ring-white/20"
-              :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+              class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
             />
-            <span class="text-white/20">-</span>
+            <span class="text-white/30">to</span>
             <input
               v-model="customEndDate"
               type="date"
-              @focus="selectedDateRange = 'custom'"
-              class="h-7 px-2 rounded bg-transparent border-0 text-xs focus:outline-none focus:ring-1 focus:ring-white/20"
-              :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+              class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
             />
+            <span v-if="customStartDate && customEndDate" class="text-xs text-white/40 ml-1">
+              {{ Math.ceil((new Date(customEndDate) - new Date(customStartDate)) / (1000 * 60 * 60 * 24)) }}d
+            </span>
           </div>
         </div>
         
@@ -478,31 +517,27 @@ function clearAll() {
               </button>
             </div>
             
-            <!-- Custom Date Range - Always Visible -->
-            <div class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
+            <!-- Custom Date Range - Only shown when Custom selected -->
+            <div v-if="selectedDateRange === 'custom'" class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
               <input
                 v-model="customStartDate"
                 type="date"
-                @focus="selectedDateRange = 'custom'"
-                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/70 focus:outline-none focus:ring-1 focus:ring-white/20"
-                :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
               />
-              <span class="text-white/20">-</span>
+              <span class="text-white/30">to</span>
               <input
                 v-model="customEndDate"
                 type="date"
-                @focus="selectedDateRange = 'custom'"
-                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/70 focus:outline-none focus:ring-1 focus:ring-white/20"
-                :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
               />
+              <span v-if="customStartDate && customEndDate" class="text-xs text-white/40 ml-1">
+                {{ Math.ceil((new Date(customEndDate) - new Date(customStartDate)) / (1000 * 60 * 60 * 24)) }}d
+              </span>
             </div>
           </div>
           
           <div class="text-xs text-white/30">
             {{ currentMetric?.description }}
-            <span v-if="selectedDateRange === 'custom' && customStartDate && customEndDate" class="ml-2 text-white/50">
-              ({{ Math.ceil((new Date(customEndDate) - new Date(customStartDate)) / (1000 * 60 * 60 * 24)) }} days)
-            </span>
           </div>
         </div>
         
