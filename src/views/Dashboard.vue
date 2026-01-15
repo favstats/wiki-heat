@@ -42,10 +42,7 @@ const dateRangePresets = [
 // Sync with store for persistence and sharing with PageInput
 const selectedDateRange = computed({
   get: () => store.dateRangeSettings.preset,
-  set: (val) => { 
-    console.log('[DateRange] Setting preset to:', val)
-    store.dateRangeSettings.preset = val 
-  }
+  set: (val) => { store.dateRangeSettings.preset = val }
 })
 
 // Initialize custom dates with sensible defaults
@@ -55,38 +52,21 @@ ninetyDaysAgo.setDate(today.getDate() - 90)
 
 const customStartDate = computed({
   get: () => store.dateRangeSettings.customStart || ninetyDaysAgo.toISOString().split('T')[0],
-  set: (val) => { 
-    console.log('[DateRange] Setting customStart to:', val)
-    store.dateRangeSettings.customStart = val 
-  }
+  set: (val) => { store.dateRangeSettings.customStart = val }
 })
 const customEndDate = computed({
   get: () => store.dateRangeSettings.customEnd || today.toISOString().split('T')[0],
-  set: (val) => { 
-    console.log('[DateRange] Setting customEnd to:', val)
-    store.dateRangeSettings.customEnd = val 
-  }
+  set: (val) => { store.dateRangeSettings.customEnd = val }
 })
 
 // Calculate effective date range
 const effectiveDateRange = computed(() => {
-  const presetKey = selectedDateRange.value
-  const preset = dateRangePresets.find(p => p.key === presetKey)
-  
-  console.log('[effectiveDateRange] Computing...', {
-    presetKey,
-    presetDays: preset?.days,
-    customStart: customStartDate.value,
-    customEnd: customEndDate.value,
-    storeCustomStart: store.dateRangeSettings.customStart,
-    storeCustomEnd: store.dateRangeSettings.customEnd,
-  })
+  const preset = dateRangePresets.find(p => p.key === selectedDateRange.value)
   
   if (preset?.days) {
     const end = new Date()
     const start = new Date()
     start.setDate(start.getDate() - preset.days)
-    console.log('[effectiveDateRange] Using preset:', preset.days, 'days')
     return { start, end, days: preset.days }
   }
   
@@ -94,12 +74,10 @@ const effectiveDateRange = computed(() => {
   if (customStartDate.value && customEndDate.value) {
     const start = new Date(customStartDate.value)
     const end = new Date(customEndDate.value)
-    console.log('[effectiveDateRange] Using custom:', customStartDate.value, 'to', customEndDate.value)
     return { start, end, days: null }
   }
   
   // Default to 90 days
-  console.log('[effectiveDateRange] Using default 90 days')
   const end = new Date()
   const start = new Date()
   start.setDate(start.getDate() - 90)
@@ -338,16 +316,7 @@ function getWeeksForDateRange() {
   const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000))
   const diffWeeks = Math.ceil(diffDays / 7)
   // Minimum 12 weeks, maximum 1040 weeks (20 years)
-  const result = Math.max(12, Math.min(diffWeeks + 4, 1040))
-  
-  console.log('[Dashboard getWeeksForDateRange]', { 
-    start: start.toISOString(), 
-    end: end.toISOString(), 
-    diffDays, 
-    diffWeeks,
-    result 
-  })
-  return result
+  return Math.max(12, Math.min(diffWeeks + 4, 1040))
 }
 
 async function addSuggestion(title) {
@@ -462,6 +431,25 @@ function clearAll() {
     </header>
     
     <main class="relative z-10 max-w-[1600px] mx-auto px-6 py-8">
+      <!-- Storage Warning -->
+      <div 
+        v-if="store.storageStatus" 
+        class="mb-4 p-3 rounded-lg flex items-start gap-3"
+        :class="store.storageStatus.type === 'error' 
+          ? 'bg-red-500/10 border border-red-500/20' 
+          : 'bg-amber-500/10 border border-amber-500/20'"
+      >
+        <div class="flex-1 text-sm" :class="store.storageStatus.type === 'error' ? 'text-red-300' : 'text-amber-300'">
+          {{ store.storageStatus.message }}
+        </div>
+        <button 
+          @click="store.clearStorageWarning()" 
+          class="text-white/40 hover:text-white/60 text-xs"
+        >
+          Dismiss
+        </button>
+      </div>
+      
       <!-- Search -->
       <div class="mb-8">
         <PageInput @added="() => {}" />

@@ -16,6 +16,17 @@ function loadFromStorage() {
   return null
 }
 
+// Storage status for UI feedback
+let storageWarning = null
+
+function getStorageWarning() {
+  return storageWarning
+}
+
+function clearStorageWarning() {
+  storageWarning = null
+}
+
 // Save to localStorage (without large revision arrays to save space)
 function saveToStorage(data) {
   try {
@@ -30,8 +41,10 @@ function saveToStorage(data) {
       }))
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(lightData))
+    storageWarning = null
   } catch (e) {
     console.error('Failed to save to localStorage:', e)
+    
     // Try saving with even less data
     try {
       const minimalData = {
@@ -42,9 +55,16 @@ function saveToStorage(data) {
         }))
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalData))
-      console.log('Saved with minimal data (no revisions)')
+      storageWarning = {
+        type: 'warning',
+        message: 'Storage limit reached. Editor details may not persist after refresh. Try using shorter date ranges or fewer pages.'
+      }
     } catch (e2) {
       console.error('Still failed to save:', e2)
+      storageWarning = {
+        type: 'error', 
+        message: 'Storage full. Your data will not persist after refresh. Remove some pages or use shorter date ranges (recommended: under 5 years for multiple pages).'
+      }
     }
   }
 }
@@ -182,11 +202,11 @@ export const usePagesStore = defineStore('pages', () => {
     
     const weeks = Math.ceil(days / 7) + 4 // Add buffer
     // Allow up to 20 years (1040 weeks) for historical analysis
-    const result = Math.max(12, Math.min(weeks, 1040))
-    
-    console.log('[Fetch Config]', { preset, customStart, customEnd, days, weeks: result })
-    return result
+    return Math.max(12, Math.min(weeks, 1040))
   }
+  
+  // Reactive storage warning
+  const storageStatus = computed(() => getStorageWarning())
   
   return {
     // State
@@ -196,6 +216,7 @@ export const usePagesStore = defineStore('pages', () => {
     dateRangeSettings,
     isLoading,
     loadingPageId,
+    storageStatus,
     
     // Getters
     selectedPage,
@@ -213,5 +234,6 @@ export const usePagesStore = defineStore('pages', () => {
     updateSettings,
     clearAllData,
     getWeeksForFetch,
+    clearStorageWarning,
   }
 })
