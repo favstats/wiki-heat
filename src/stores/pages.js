@@ -37,6 +37,13 @@ export const usePagesStore = defineStore('pages', () => {
     theme: 'dark',
     weights: null, // null means use defaults
   })
+  
+  // Date range settings - shared across components
+  const dateRangeSettings = ref(savedData?.dateRangeSettings || {
+    preset: '90d',
+    customStart: null,
+    customEnd: null,
+  })
   const isLoading = ref(false)
   const loadingPageId = ref(null)
   
@@ -121,21 +128,39 @@ export const usePagesStore = defineStore('pages', () => {
   
   // Persist to localStorage on changes
   watch(
-    () => ({ pages: pages.value, settings: settings.value }),
+    () => ({ pages: pages.value, settings: settings.value, dateRangeSettings: dateRangeSettings.value }),
     (newData) => {
       saveToStorage({
         pages: newData.pages,
         settings: newData.settings,
+        dateRangeSettings: newData.dateRangeSettings,
       })
     },
     { deep: true }
   )
+  
+  // Helper to get weeks needed for current date range
+  function getWeeksForFetch() {
+    const { preset, customStart, customEnd } = dateRangeSettings.value
+    const presetDays = { '30d': 30, '90d': 90, '1y': 365, '5y': 1825, 'custom': null }
+    
+    let days = presetDays[preset] || 90
+    if (preset === 'custom' && customStart && customEnd) {
+      const start = new Date(customStart)
+      const end = new Date(customEnd)
+      days = Math.ceil((end - start) / (24 * 60 * 60 * 1000))
+    }
+    
+    const weeks = Math.ceil(days / 7) + 4 // Add buffer
+    return Math.max(12, Math.min(weeks, 260)) // 12 weeks to 5 years
+  }
   
   return {
     // State
     pages,
     selectedPageId,
     settings,
+    dateRangeSettings,
     isLoading,
     loadingPageId,
     
@@ -154,5 +179,6 @@ export const usePagesStore = defineStore('pages', () => {
     setLoading,
     updateSettings,
     clearAllData,
+    getWeeksForFetch,
   }
 })

@@ -44,13 +44,18 @@ async function addPage(title) {
     const pageInfo = await getPageInfo(title)
     if (!pageInfo?.exists) throw new Error('Page not found')
     
+    // Get weeks needed based on selected date range
+    const weeksNeeded = store.getWeeksForFetch()
+    const maxRevisions = Math.min(weeksNeeded * 50, 5000)
+    const pageviewDays = Math.min(weeksNeeded * 7, 730)
+    
     progress.value = 'Loading revisions...'
-    const revisions = await getAllRevisions(title, 3000, (count) => {
+    const revisions = await getAllRevisions(title, maxRevisions, (count) => {
       progress.value = `${count} revisions...`
     })
     
     const talkCount = await getTalkPageRevisionCount(title)
-    const pageviews = await getPageviews(title, 365)
+    const pageviews = await getPageviews(title, pageviewDays)
     
     progress.value = 'Computing index...'
     const signals = extractSignals(revisions, {
@@ -66,11 +71,11 @@ async function addPage(title) {
       revisions,
       pageviews,
       currentHeat: calculateHeatScore(signals),
-      // Generate 52 weeks (1 year) of timeline data
+      // Generate timeline data based on selected date range
       heatTimeline: calculateHeatTimeline(revisions, {
         protectionLevel: pageInfo.protectionLevel,
         talkRevisionCount: talkCount,
-        weeks: 52,
+        weeks: weeksNeeded,
       }),
       signals,
       talkRevisionCount: talkCount,

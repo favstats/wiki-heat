@@ -30,16 +30,34 @@ const { getPageviews } = usePageviews()
 // Selected page for panel
 const selectedPage = ref(null)
 
-// Date range
+// Date range presets
 const dateRangePresets = [
-  { key: '30d', name: '30 days', days: 30 },
-  { key: '90d', name: '90 days', days: 90 },
-  { key: '1y', name: '1 year', days: 365 },
+  { key: '30d', name: '30d', days: 30 },
+  { key: '90d', name: '90d', days: 90 },
+  { key: '1y', name: '1y', days: 365 },
+  { key: '5y', name: '5y', days: 1825 },
   { key: 'custom', name: 'Custom', days: null },
 ]
-const selectedDateRange = ref('90d')
-const customStartDate = ref('')
-const customEndDate = ref('')
+
+// Sync with store for persistence and sharing with PageInput
+const selectedDateRange = computed({
+  get: () => store.dateRangeSettings.preset,
+  set: (val) => { store.dateRangeSettings.preset = val }
+})
+
+// Initialize custom dates with sensible defaults
+const today = new Date()
+const ninetyDaysAgo = new Date()
+ninetyDaysAgo.setDate(today.getDate() - 90)
+
+const customStartDate = computed({
+  get: () => store.dateRangeSettings.customStart || ninetyDaysAgo.toISOString().split('T')[0],
+  set: (val) => { store.dateRangeSettings.customStart = val }
+})
+const customEndDate = computed({
+  get: () => store.dateRangeSettings.customEnd || today.toISOString().split('T')[0],
+  set: (val) => { store.dateRangeSettings.customEnd = val }
+})
 
 // Calculate effective date range
 const effectiveDateRange = computed(() => {
@@ -239,6 +257,15 @@ const chartOptions = computed(() => ({
 const addingSuggestion = ref(null)
 const suggestions = ['ChatGPT', 'Taylor Swift', 'Donald Trump', 'Climate change']
 
+// Calculate how many weeks of data to fetch based on date range
+function getWeeksForDateRange() {
+  const { start, end } = effectiveDateRange.value
+  const diffMs = end - start
+  const diffWeeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000))
+  // Minimum 12 weeks, maximum 260 weeks (5 years)
+  return Math.max(12, Math.min(diffWeeks + 4, 260))
+}
+
 async function addSuggestion(title) {
   if (addingSuggestion.value || store.pages.find(p => p.title === title)) return
   addingSuggestion.value = title
@@ -247,10 +274,14 @@ async function addSuggestion(title) {
     const pageInfo = await getPageInfo(title)
     if (!pageInfo?.exists) throw new Error('Not found')
     
-    // Fetch more revisions for longer time ranges
-    const revisions = await getAllRevisions(title, 3000)
+    // Calculate weeks needed based on selected date range
+    const weeksNeeded = getWeeksForDateRange()
+    // Fetch more revisions for longer time ranges (roughly 50 revisions per week for active pages)
+    const maxRevisions = Math.min(weeksNeeded * 50, 5000)
+    
+    const revisions = await getAllRevisions(title, maxRevisions)
     const talkCount = await getTalkPageRevisionCount(title)
-    const pageviews = await getPageviews(title, 365)
+    const pageviews = await getPageviews(title, Math.min(weeksNeeded * 7, 730))
     
     const signals = extractSignals(revisions, {
       protectionLevel: pageInfo.protectionLevel,
@@ -264,11 +295,11 @@ async function addSuggestion(title) {
       protectionLevel: pageInfo.protectionLevel,
       revisions, pageviews,
       currentHeat: calculateHeatScore(signals),
-      // Generate 52 weeks (1 year) of timeline data
+      // Generate timeline data based on selected date range
       heatTimeline: calculateHeatTimeline(revisions, {
         protectionLevel: pageInfo.protectionLevel,
         talkRevisionCount: talkCount,
-        weeks: 52,
+        weeks: weeksNeeded,
       }),
       signals,
       talkRevisionCount: talkCount,
@@ -353,7 +384,43 @@ function clearAll() {
       </div>
       
       <!-- Empty State -->
-      <div v-if="!hasPages" class="text-center py-24">
+      <div v-if="!hasPages" class="text-center py-12">
+        <!-- Date Range Controls - Visible from start -->
+        <div class="flex flex-wrap justify-center items-center gap-3 mb-12">
+          <div class="flex items-center gap-1 p-1 rounded-lg bg-white/[0.02] border border-white/5">
+            <Calendar class="w-3 h-3 text-white/30 ml-2" />
+            <button
+              v-for="dr in dateRangePresets"
+              :key="dr.key"
+              @click="selectedDateRange = dr.key"
+              class="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              :class="selectedDateRange === dr.key 
+                ? 'bg-white/10 text-white/90' 
+                : 'text-white/40 hover:text-white/60'"
+            >
+              {{ dr.name }}
+            </button>
+          </div>
+          
+          <div class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
+            <input
+              v-model="customStartDate"
+              type="date"
+              @focus="selectedDateRange = 'custom'"
+              class="h-7 px-2 rounded bg-transparent border-0 text-xs focus:outline-none focus:ring-1 focus:ring-white/20"
+              :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+            />
+            <span class="text-white/20">-</span>
+            <input
+              v-model="customEndDate"
+              type="date"
+              @focus="selectedDateRange = 'custom'"
+              class="h-7 px-2 rounded bg-transparent border-0 text-xs focus:outline-none focus:ring-1 focus:ring-white/20"
+              :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+            />
+          </div>
+        </div>
+        
         <div class="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/5 flex items-center justify-center">
           <Flame class="w-7 h-7 text-white/20" />
         </div>
@@ -395,7 +462,7 @@ function clearAll() {
               </button>
             </div>
             
-            <!-- Date Range -->
+            <!-- Date Range Presets -->
             <div class="flex items-center gap-1 p-1 rounded-lg bg-white/[0.02] border border-white/5">
               <Calendar class="w-3 h-3 text-white/30 ml-2" />
               <button
@@ -410,30 +477,33 @@ function clearAll() {
                 {{ dr.name }}
               </button>
             </div>
+            
+            <!-- Custom Date Range - Always Visible -->
+            <div class="flex items-center gap-2 p-1 rounded-lg bg-white/[0.02] border border-white/5">
+              <input
+                v-model="customStartDate"
+                type="date"
+                @focus="selectedDateRange = 'custom'"
+                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/70 focus:outline-none focus:ring-1 focus:ring-white/20"
+                :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+              />
+              <span class="text-white/20">-</span>
+              <input
+                v-model="customEndDate"
+                type="date"
+                @focus="selectedDateRange = 'custom'"
+                class="h-7 px-2 rounded bg-transparent border-0 text-xs text-white/70 focus:outline-none focus:ring-1 focus:ring-white/20"
+                :class="selectedDateRange === 'custom' ? 'text-white/90' : 'text-white/40'"
+              />
+            </div>
           </div>
           
           <div class="text-xs text-white/30">
             {{ currentMetric?.description }}
+            <span v-if="selectedDateRange === 'custom' && customStartDate && customEndDate" class="ml-2 text-white/50">
+              ({{ Math.ceil((new Date(customEndDate) - new Date(customStartDate)) / (1000 * 60 * 60 * 24)) }} days)
+            </span>
           </div>
-        </div>
-        
-        <!-- Custom Date Range Inputs -->
-        <div v-if="selectedDateRange === 'custom'" class="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5">
-          <span class="text-xs text-white/40">From:</span>
-          <input
-            v-model="customStartDate"
-            type="date"
-            class="h-8 px-3 rounded-lg bg-white/[0.02] border border-white/5 text-sm text-white/70"
-          />
-          <span class="text-xs text-white/40">To:</span>
-          <input
-            v-model="customEndDate"
-            type="date"
-            class="h-8 px-3 rounded-lg bg-white/[0.02] border border-white/5 text-sm text-white/70"
-          />
-          <span v-if="customStartDate && customEndDate" class="text-xs text-white/30 ml-2">
-            {{ Math.ceil((new Date(customEndDate) - new Date(customStartDate)) / (1000 * 60 * 60 * 24)) }} days
-          </span>
         </div>
         
         <!-- Page Tags -->
