@@ -157,7 +157,8 @@ export const usePagesStore = defineStore('pages', () => {
     }
     
     const weeks = Math.ceil(days / 7) + 4 // Add buffer
-    const result = Math.max(12, Math.min(weeks, 260)) // 12 weeks to 5 years
+    // Allow up to 20 years (1040 weeks) for historical analysis
+    const result = Math.max(12, Math.min(weeks, 1040))
     
     console.log('[Fetch Config]', { preset, customStart, customEnd, days, weeks: result })
     return result

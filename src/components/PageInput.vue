@@ -46,7 +46,9 @@ async function addPage(title) {
     
     // Get weeks needed based on selected date range
     const weeksNeeded = store.getWeeksForFetch()
-    const maxRevisions = Math.min(weeksNeeded * 50, 5000)
+    // Allow more revisions for longer ranges (up to 10000)
+    const maxRevisions = Math.min(weeksNeeded * 20, 10000)
+    // Pageviews API only allows ~2 years max
     const pageviewDays = Math.min(weeksNeeded * 7, 730)
     
     progress.value = 'Loading revisions...'

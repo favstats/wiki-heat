@@ -42,7 +42,10 @@ const dateRangePresets = [
 // Sync with store for persistence and sharing with PageInput
 const selectedDateRange = computed({
   get: () => store.dateRangeSettings.preset,
-  set: (val) => { store.dateRangeSettings.preset = val }
+  set: (val) => { 
+    console.log('[DateRange] Setting preset to:', val)
+    store.dateRangeSettings.preset = val 
+  }
 })
 
 // Initialize custom dates with sensible defaults
@@ -52,11 +55,17 @@ ninetyDaysAgo.setDate(today.getDate() - 90)
 
 const customStartDate = computed({
   get: () => store.dateRangeSettings.customStart || ninetyDaysAgo.toISOString().split('T')[0],
-  set: (val) => { store.dateRangeSettings.customStart = val }
+  set: (val) => { 
+    console.log('[DateRange] Setting customStart to:', val)
+    store.dateRangeSettings.customStart = val 
+  }
 })
 const customEndDate = computed({
   get: () => store.dateRangeSettings.customEnd || today.toISOString().split('T')[0],
-  set: (val) => { store.dateRangeSettings.customEnd = val }
+  set: (val) => { 
+    console.log('[DateRange] Setting customEnd to:', val)
+    store.dateRangeSettings.customEnd = val 
+  }
 })
 
 // Calculate effective date range
@@ -312,9 +321,19 @@ const suggestions = ['ChatGPT', 'Taylor Swift', 'Donald Trump', 'Climate change'
 function getWeeksForDateRange() {
   const { start, end } = effectiveDateRange.value
   const diffMs = end - start
-  const diffWeeks = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000))
-  // Minimum 12 weeks, maximum 260 weeks (5 years)
-  return Math.max(12, Math.min(diffWeeks + 4, 260))
+  const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000))
+  const diffWeeks = Math.ceil(diffDays / 7)
+  // Minimum 12 weeks, maximum 1040 weeks (20 years)
+  const result = Math.max(12, Math.min(diffWeeks + 4, 1040))
+  
+  console.log('[Dashboard getWeeksForDateRange]', { 
+    start: start.toISOString(), 
+    end: end.toISOString(), 
+    diffDays, 
+    diffWeeks,
+    result 
+  })
+  return result
 }
 
 async function addSuggestion(title) {
@@ -327,8 +346,8 @@ async function addSuggestion(title) {
     
     // Calculate weeks needed based on selected date range
     const weeksNeeded = getWeeksForDateRange()
-    // Fetch more revisions for longer time ranges (roughly 50 revisions per week for active pages)
-    const maxRevisions = Math.min(weeksNeeded * 50, 5000)
+    // Fetch more revisions for longer time ranges (up to 10000 for very long ranges)
+    const maxRevisions = Math.min(weeksNeeded * 20, 10000)
     
     const revisions = await getAllRevisions(title, maxRevisions)
     const talkCount = await getTalkPageRevisionCount(title)
