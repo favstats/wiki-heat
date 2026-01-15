@@ -39,10 +39,15 @@ export const usePagesStore = defineStore('pages', () => {
   })
   
   // Date range settings - shared across components
+  // Initialize with sensible defaults if not saved
+  const today = new Date()
+  const ninetyDaysAgo = new Date()
+  ninetyDaysAgo.setDate(today.getDate() - 90)
+  
   const dateRangeSettings = ref(savedData?.dateRangeSettings || {
     preset: '90d',
-    customStart: null,
-    customEnd: null,
+    customStart: ninetyDaysAgo.toISOString().split('T')[0],
+    customEnd: today.toISOString().split('T')[0],
   })
   const isLoading = ref(false)
   const loadingPageId = ref(null)
@@ -152,7 +157,10 @@ export const usePagesStore = defineStore('pages', () => {
     }
     
     const weeks = Math.ceil(days / 7) + 4 // Add buffer
-    return Math.max(12, Math.min(weeks, 260)) // 12 weeks to 5 years
+    const result = Math.max(12, Math.min(weeks, 260)) // 12 weeks to 5 years
+    
+    console.log('[Fetch Config]', { preset, customStart, customEnd, days, weeks: result })
+    return result
   }
   
   return {
