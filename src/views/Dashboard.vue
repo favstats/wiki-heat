@@ -70,22 +70,36 @@ const customEndDate = computed({
 
 // Calculate effective date range
 const effectiveDateRange = computed(() => {
-  const preset = dateRangePresets.find(p => p.key === selectedDateRange.value)
+  const presetKey = selectedDateRange.value
+  const preset = dateRangePresets.find(p => p.key === presetKey)
+  
+  console.log('[effectiveDateRange] Computing...', {
+    presetKey,
+    presetDays: preset?.days,
+    customStart: customStartDate.value,
+    customEnd: customEndDate.value,
+    storeCustomStart: store.dateRangeSettings.customStart,
+    storeCustomEnd: store.dateRangeSettings.customEnd,
+  })
+  
   if (preset?.days) {
     const end = new Date()
     const start = new Date()
     start.setDate(start.getDate() - preset.days)
+    console.log('[effectiveDateRange] Using preset:', preset.days, 'days')
     return { start, end, days: preset.days }
   }
+  
   // Custom range
   if (customStartDate.value && customEndDate.value) {
-    return {
-      start: new Date(customStartDate.value),
-      end: new Date(customEndDate.value),
-      days: null,
-    }
+    const start = new Date(customStartDate.value)
+    const end = new Date(customEndDate.value)
+    console.log('[effectiveDateRange] Using custom:', customStartDate.value, 'to', customEndDate.value)
+    return { start, end, days: null }
   }
+  
   // Default to 90 days
+  console.log('[effectiveDateRange] Using default 90 days')
   const end = new Date()
   const start = new Date()
   start.setDate(start.getDate() - 90)

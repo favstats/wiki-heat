@@ -16,12 +16,36 @@ function loadFromStorage() {
   return null
 }
 
-// Save to localStorage
+// Save to localStorage (without large revision arrays to save space)
 function saveToStorage(data) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    // Create a lightweight copy without the large revisions array
+    const lightData = {
+      ...data,
+      pages: data.pages.map(page => ({
+        ...page,
+        // Don't store raw revisions - they're only needed for initial computation
+        // Keep a small sample for the panel display
+        revisions: (page.revisions || []).slice(0, 200),
+      }))
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(lightData))
   } catch (e) {
     console.error('Failed to save to localStorage:', e)
+    // Try saving with even less data
+    try {
+      const minimalData = {
+        ...data,
+        pages: data.pages.map(page => ({
+          ...page,
+          revisions: [], // Don't store revisions at all
+        }))
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalData))
+      console.log('Saved with minimal data (no revisions)')
+    } catch (e2) {
+      console.error('Still failed to save:', e2)
+    }
   }
 }
 
